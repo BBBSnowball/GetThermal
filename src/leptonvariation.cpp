@@ -62,6 +62,7 @@ LeptonVariation::LeptonVariation(uvc_context_t *ctx,
                  &m_portDesc);
     printf("OK\n");
 
+    supportsGenericI2C = false;
     const uvc_extension_unit_t *units = uvc_get_extension_units(devh);
     while (units)
     {
@@ -69,6 +70,8 @@ LeptonVariation::LeptonVariation(uvc_context_t *ctx,
         for (int i = 0; i < 16; i++)
             printf(" %02x", units->guidExtensionCode[i]);
         printf("\n");
+        if (units->bUnitID == 0xfe && (units->bmControls & (1<<6)))
+            supportsGenericI2C = true;
         units = units->next;
     }
 
@@ -93,6 +96,10 @@ LeptonVariation::LeptonVariation(uvc_context_t *ctx,
     m_periodicTimer = new QTimer(this);
     connect(m_periodicTimer, SIGNAL(timeout()), this, SLOT(updateSpotmeter()));
     m_periodicTimer->start(1000);
+
+    printf("I2C for additional devices supported by firmware: %d\n", supportsGenericI2C);
+
+    EnumerateMLX90614();
 }
 
 LeptonVariation::~LeptonVariation()
@@ -164,6 +171,16 @@ const QVideoSurfaceFormat LeptonVariation::getDefaultFormat()
 void LeptonVariation::updateSpotmeter()
 {
     emit radSpotmeterInKelvinX100Changed();
+
+    if (hasMLX90614)
+    {
+        if (ReadMLX90614AmbientTemperature(NULL, &ambientTemperatureMLX90614) == LEP_OK
+            && ReadMLX90614ObjectTemperature(NULL, &objectTemperatureMLX90614) == LEP_OK)
+        {
+            printf("MLX90614 reports %.2f °C (ambient) and %.2f °C (object)\n",
+                ambientTemperatureMLX90614, objectTemperatureMLX90614);
+        }
+    }
 }
 
 unsigned int LeptonVariation::getRadSpotmeterObjInKelvinX100()
@@ -373,6 +390,9 @@ LEP_RESULT LeptonVariation::UVC_I2CWriteRead(uint8_t i2cAddress,
     if (writeLength > (int)sizeof(custom_uvc.data) || readLength > (int)sizeof(custom_response.data) || writeLength < -1 || readLength < -1)
         return LEP_ERROR;
 
+    if (!supportsGenericI2C)
+        return LEP_FUNCTION_NOT_SUPPORTED;
+
     QMutexLocker lock(&m_mutex);
 
     custom_uvc.address = i2cAddress;
@@ -470,6 +490,181 @@ LEP_RESULT LeptonVariation::UVC_I2CScan(bool addressPresent[128], bool verbose)
 
     if (verbose && first_unusual_result != LEP_OK)
         printf("Result for first ?? is %d.\n", first_unusual_result);
+
+    return LEP_OK;
+}
+
+LEP_RESULT LeptonVariation::ReadFromMLX90614(uint8_t command, uint16_t* out)
+{
+    // 0x00..0x1f is RAM, 0x20..0x3f is EEPROM. Only these parts can be accessed by this read function.
+    if (command > 0x40)
+        return LEP_ERROR;
+
+    uint8_t cmd[] = { command };
+    uint8_t reply[3];
+    LEP_RESULT i2cResult;
+    LEP_RESULT result = UVC_I2CWriteRead(0x5a, cmd, 1, reply, 3, &i2cResult);
+    if (result != LEP_OK)
+    {
+        printf("Couldn't send I2C request to PureThermal.\n");
+        return result < 0 ? result : LEP_ERROR;
+    }
+    else if (i2cResult != LEP_OK)
+    {
+        if (errorsForMLX90614 < 5)
+        {
+            errorsForMLX90614++;
+            if (errorsForMLX90614 == 5)
+            {
+                hasMLX90614 = false;
+                //FIXME notify
+            }
+        }
+
+        printf("I2C communication to MLX90614 didn't go as expected: %d\n", i2cResult);
+        return result < 0 ? result : LEP_ERROR_I2C_FAIL;
+    }
+    else
+    {
+        if (errorsForMLX90614 > -5)
+            errorsForMLX90614--;
+
+        //FIXME We should compare the checksum in the third byte.
+        *out = reply[0] | (reply[1] << 8);
+        return LEP_OK;
+    }
+}
+
+LEP_RESULT LeptonVariation::ReadMLX90614AmbientTemperature(uint16_t* raw, float* celsius, bool force)
+{
+    LEP_RESULT result;
+
+    if (!hasMLX90614 && !force)
+        return LEP_FUNCTION_NOT_SUPPORTED;
+
+    uint16_t value;
+    result = ReadFromMLX90614(0x6, &value);
+    if (result < 0)
+        return result;
+
+    if (value & 0x8000)
+        // sensor tells us that the value isn't valid
+        return LEP_DATA_OUT_OF_RANGE_ERROR;
+
+    if (raw)
+        *raw = value;
+    if (celsius)
+        *celsius = value * 0.02 - 273.15;
+
+    return LEP_OK;
+}
+
+LEP_RESULT LeptonVariation::ReadMLX90614ObjectTemperature(uint16_t* raw, float* celsius, bool force)
+{
+    LEP_RESULT result;
+
+    if (!hasMLX90614 && !force)
+        return LEP_FUNCTION_NOT_SUPPORTED;
+
+    uint16_t value;
+    result = ReadFromMLX90614(0x7, &value);
+    if (result < 0)
+        return result;
+
+    if (value & 0x8000)
+        // sensor tells us that the value isn't valid
+        return LEP_DATA_OUT_OF_RANGE_ERROR;
+
+    if (raw)
+        *raw = value;
+    if (celsius)
+        *celsius = value * 0.02 - 273.15;
+
+    return LEP_OK;
+}
+
+LEP_RESULT LeptonVariation::EnumerateMLX90614()
+{
+    LEP_RESULT result, i2cResult;
+    uint8_t buf[3];
+
+    hasMLX90614 = false;
+    errorsForMLX90614 = 0;
+    ambientTemperatureMLX90614 = -300;
+    objectTemperatureMLX90614 = -300;
+
+    if (!supportsGenericI2C)
+        return LEP_OK;
+
+    result = UVC_I2CWrite(0x5a, buf, 0, &i2cResult);
+    if (result != LEP_OK)
+    {
+        return result;
+    }
+    else if (i2cResult != LEP_OK)
+    {
+        // no reply from sensors -> probably no sensor is present
+        return LEP_OK;
+    }
+
+    result = UVC_I2CWrite(0x5a+1, buf, 0, &i2cResult);
+    if (result != LEP_OK)
+    {
+        return result;
+    }
+    else if (i2cResult == LEP_OK)
+    {
+        // unexpected reply from an address that shouldn't have any device
+        // -> Let's play it save (i.e. assume no sensors is present) to not confuse users in case of weird I2C behaviour.
+        return LEP_OK;
+    }
+
+    // Melexis hasn't documented any way of detecting an MLX90614 (or even to tell apart which type it is).
+    // Therefore, we look at some default values in EEPROM. There is no reason to change them when using
+    // the sensor in I2C mode so we assume that users. These values seem to be the same even non-original
+    // devices that differ in other regards, namely how they calculate the checksum.
+    uint16_t eeprom0, eeprom1;
+    result = ReadFromMLX90614(0x20, &eeprom0);
+    if (result != LEP_OK)
+        return result;
+    result = ReadFromMLX90614(0x21, &eeprom1);
+    if (result != LEP_OK)
+        return result;
+    if (eeprom0 != 0x9993 || eeprom1 != 0x62e3)
+    {
+        printf("We found some device at I2C address 0x5a but we got unexpected values when reading EEPROM cells 0 and 1. Therefore, we assume that it is not an MLX90614 sensor.\n");
+        return LEP_OK;
+    }
+
+    float ambientTemperature, objectTemperature;
+    result = ReadMLX90614AmbientTemperature(NULL, &ambientTemperature, true);
+    if (result != LEP_OK)
+    {
+        printf("Cannot read ambient temperature from MLX90614: %d\n", result);
+        return LEP_OK;
+    }
+
+    result = ReadMLX90614ObjectTemperature(NULL, &objectTemperature, true);
+    if (result != LEP_OK)
+    {
+        printf("Cannot read object temperature from MLX90614: %d\n", result);
+        return LEP_OK;
+    }
+
+    //NOTE Both ranges are a bit wider than what is supported according to the datasheet.
+    if (ambientTemperature < -60 || ambientTemperature > 150 || objectTemperature < -100 || objectTemperature > 500)
+    {
+        printf("We got unexpected temperatures from MLX90614: ambient %.2f °C, object %.2f °C\n", ambientTemperature, objectTemperature);
+        return LEP_OK;
+    }
+
+    printf("We found an MLX90614 connected to the PureThermal board. Current temperatures are %.2f °C (ambient, i.e. the sensor itself) and %.2f °C (object).\n",
+        ambientTemperature, objectTemperature);
+
+    //FIXME notify for hasMLX90614 and temperatures
+    hasMLX90614 = true;
+    ambientTemperatureMLX90614 = ambientTemperature;
+    objectTemperatureMLX90614 = objectTemperature;
 
     return LEP_OK;
 }

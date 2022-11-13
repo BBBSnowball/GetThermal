@@ -54,12 +54,13 @@ public:
     LEP_RESULT UVC_RunCommand(LEP_COMMAND_ID commandID);
 
     LEP_RESULT UVC_I2CWriteRead(uint8_t i2cAddress, const void* writeData, int writeLength, void* readData, int readLength, LEP_RESULT* i2cResult);
-
     LEP_RESULT UVC_I2CWrite(uint8_t i2cAddress, const void* writeData, int writeLength, LEP_RESULT* i2cResult);
-
     LEP_RESULT UVC_I2CRead(uint8_t i2cAddress, void* readData, int readLength, LEP_RESULT* i2cResult);
-
     LEP_RESULT UVC_I2CScan(bool addressPresent[128], bool verbose = true);
+
+    LEP_RESULT ReadMLX90614AmbientTemperature(uint16_t* raw, float* celsius, bool force = false);
+    LEP_RESULT ReadMLX90614ObjectTemperature(uint16_t* raw, float* celsius, bool force = false);
+    LEP_RESULT ReadFromMLX90614(uint8_t command, uint16_t* out);
 
     LEP_CAMERA_PORT_DESC_T_PTR GetPortDescription() { return &m_portDesc; }
 
@@ -174,6 +175,8 @@ private:
 
     LEP_RESULT UVC_CustomWrite(const void* attributePtr, int length);
 
+    LEP_RESULT EnumerateMLX90614();
+
     template <class T, class W>
     function<W(void)> bind_get(function<LEP_RESULT(LEP_CAMERA_PORT_DESC_T_PTR, T*)> F)
     {
@@ -216,6 +219,11 @@ private:
     uint64_t serialNumber;
     LEP_OEM_SW_VERSION_T swVers;
     LEP_OEM_PART_NUMBER_T partNumber;
+
+    bool supportsGenericI2C;
+    bool hasMLX90614;
+    int errorsForMLX90614;
+    float ambientTemperatureMLX90614, objectTemperatureMLX90614;
 
     int leptonCommandIdToUnitId(LEP_COMMAND_ID commandID);
 };
