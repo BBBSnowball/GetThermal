@@ -20,6 +20,8 @@ typedef enum {
   VC_CONTROL_XU_LEP_RAD_ID,
   VC_CONTROL_XU_LEP_SYS_ID,
   VC_CONTROL_XU_LEP_VID_ID,
+  VC_CONTROL_XU_I2C_ID = 0x80,
+  VC_CONTROL_XU_LEP_CUST_ID = 0xfe,
 } VC_TERMINAL_ID;
 
 #define QML_REGISTER_ENUM(name) \
@@ -252,7 +254,7 @@ LEP_RESULT LeptonVariation::UVC_GetAttribute(LEP_COMMAND_ID commandID,
     result = uvc_get_ctrl(devh, unit_id, control_id, attributePtr, attributeWordLength, UVC_GET_CUR);
     if (result != attributeWordLength)
     {
-        printf("UVC_GetAttribute failed: %d", result);
+        printf("UVC_GetAttribute failed: %d\n", result);
         return LEP_COMM_ERROR_READING_COMM;
     }
 
@@ -280,7 +282,7 @@ LEP_RESULT LeptonVariation::UVC_SetAttribute(LEP_COMMAND_ID commandID,
     result = uvc_set_ctrl(devh, unit_id, control_id, attributePtr, attributeWordLength);
     if (result != attributeWordLength)
     {
-        printf("UVC_SetAttribute failed: %d", result);
+        printf("UVC_SetAttribute failed: %d\n", result);
         return LEP_COMM_ERROR_READING_COMM;
     }
 
@@ -303,9 +305,171 @@ LEP_RESULT LeptonVariation::UVC_RunCommand(LEP_COMMAND_ID commandID)
     result = uvc_set_ctrl(devh, unit_id, control_id, &control_id, 1);
     if (result != 1)
     {
-        printf("UVC_RunCommand failed: %d", result);
+        printf("UVC_RunCommand failed: %d\n", result);
         return LEP_COMM_ERROR_READING_COMM;
     }
+
+    return LEP_OK;
+}
+
+enum CUST_COMTROL_IDS {
+	CUST_CONTROL_COMMAND=0,
+	CUST_CONTROL_GET,
+	CUST_CONTROL_SET,
+	CUST_CONTROL_RUN,
+	CUST_CONTROL_DIRECT_WRITE,
+	CUST_CONTROL_DIRECT_READ,
+    CUST_CONTROL_I2C_WRITEREAD,
+	CUST_CONTROL_END
+};
+
+LEP_RESULT LeptonVariation::UVC_CustomRead(void* attributePtr, int length)
+{
+    int result;
+
+    if (length != 2+2+512)
+        return LEP_ERROR;
+
+    QMutexLocker lock(&m_mutex);
+    result = uvc_get_ctrl(devh, VC_CONTROL_XU_LEP_CUST_ID, CUST_CONTROL_COMMAND+1, attributePtr, length, UVC_GET_CUR);
+    if (result != length)
+    {
+        printf("UVC_CustomRead failed: %d\n", result);
+        return LEP_COMM_ERROR_READING_COMM;
+    }
+
+    return LEP_OK;
+}
+
+LEP_RESULT LeptonVariation::UVC_CustomWrite(const void* attributePtr, int length)
+{
+    int result;
+
+    if (length != 2+2+512)
+        return LEP_ERROR;
+
+    QMutexLocker lock(&m_mutex);
+    result = uvc_set_ctrl(devh, VC_CONTROL_XU_LEP_CUST_ID, CUST_CONTROL_COMMAND+1, (void*)attributePtr, length);
+    if (result != length)
+    {
+        printf("UVC_CustomRead failed: %d\n", result);
+        return LEP_COMM_ERROR_READING_COMM;
+    }
+
+    return LEP_OK;
+}
+
+LEP_RESULT LeptonVariation::UVC_I2CWriteRead(uint8_t i2cAddress,
+                                             const void* writeData,
+                                             int writeLength,
+                                             void* readData,
+                                             int readLength,
+                                             LEP_RESULT* i2cResult)
+{
+    int result;
+    struct { uint16_t address; int16_t lengthWrite, lengthRead; uint8_t data[510]; } __attribute__((packed)) custom_uvc;
+    struct { LEP_RESULT result; uint8_t data[512]; } __attribute__((packed)) custom_response;
+
+    if (writeLength > (int)sizeof(custom_uvc.data) || readLength > (int)sizeof(custom_response.data) || writeLength < -1 || readLength < -1)
+        return LEP_ERROR;
+
+    QMutexLocker lock(&m_mutex);
+
+    custom_uvc.address = i2cAddress;
+    custom_uvc.lengthWrite = (int16_t)writeLength;
+    custom_uvc.lengthRead = (int16_t)readLength;
+    memset(custom_uvc.data, 0, sizeof(custom_uvc.data));
+    if (writeLength > 0)
+        memcpy(custom_uvc.data, writeData, writeLength);
+
+    LEP_RESULT lep_result = UVC_CustomWrite(&custom_uvc, sizeof(custom_uvc));
+    if (lep_result != LEP_OK)
+    {
+        printf("UVC_I2CWriteRead failed in UVC_CustomWrite: %d\n", lep_result);
+        return lep_result;
+    }
+
+
+    result = uvc_get_ctrl(devh, VC_CONTROL_XU_LEP_CUST_ID, CUST_CONTROL_I2C_WRITEREAD+1, &custom_response, sizeof(custom_response), UVC_GET_CUR);
+    if (result != sizeof(custom_response))
+    {
+        printf("UVC_I2CWriteRead failed: %d, should be %lu, %04x %02x %02x %02x %02x\n", result, sizeof(custom_response),
+            custom_response.result, custom_response.data[0], custom_response.data[1], custom_response.data[2], custom_response.data[3]);
+        return LEP_COMM_ERROR_READING_COMM;
+    }
+
+    if (custom_response.result == LEP_ERROR) {
+        printf("UVC_I2CWriteRead got LEP_ERROR, %04x %02x %02x %02x %02x\n",
+            custom_response.result, custom_response.data[0], custom_response.data[1], custom_response.data[2], custom_response.data[3]);
+    }
+
+    *i2cResult = custom_response.result;
+    if (readLength > 0)
+        memcpy(readData, custom_response.data, readLength);
+
+    return LEP_OK;
+}
+
+LEP_RESULT LeptonVariation::UVC_I2CWrite(uint8_t i2cAddress,
+                            const void* writeData,
+                            int writeLength,
+                            LEP_RESULT* i2cResult)
+{
+    uint8_t dummy;
+    return UVC_I2CWriteRead(i2cAddress, writeData, writeLength, &dummy, -1, i2cResult);
+}
+
+LEP_RESULT LeptonVariation::UVC_I2CRead(uint8_t i2cAddress,
+                            void* readData,
+                            int readLength,
+                            LEP_RESULT* i2cResult)
+{
+    return UVC_I2CWriteRead(i2cAddress, "", -1, readData, readLength, i2cResult);
+}
+
+LEP_RESULT LeptonVariation::UVC_I2CScan(bool addressPresent[128], bool verbose)
+{
+    LEP_RESULT first_unusual_result = LEP_OK;
+
+    for (int i=0; i<128; i++) {
+        LEP_RESULT result, result2;
+        char buf[1];
+        // read of length 0 or 1 doesn't work well when Lepton and MLX are connected (hangs after talking to Lepton)
+        //result = UVC_I2CRead((uint8_t)i, buf, 0, &result2);
+        // use a write access with length 0, instead
+        result = UVC_I2CWrite((uint8_t)i, buf, 0, &result2);
+        if (result != LEP_OK)
+        {
+            if (verbose)
+                printf("\nERROR in UVC_I2CScan\n");
+            return result;
+        }
+
+        addressPresent[i] = (result2 == LEP_OK);
+
+        if (verbose)
+        {
+            if (i%16 == 0)
+                printf("%02x:", i);
+
+            if (result2 == LEP_OK)
+                printf(" %02x", i);
+            else if (result2 == LEP_ERROR_I2C_NACK_RECEIVED)
+                printf(" --");
+            else
+            {
+                printf(" ??");
+                if (first_unusual_result == LEP_OK)
+                    first_unusual_result = result2;
+            }
+
+            if (i%16 == 15)
+                printf("\n");
+        }
+    }
+
+    if (verbose && first_unusual_result != LEP_OK)
+        printf("Result for first ?? is %d.\n", first_unusual_result);
 
     return LEP_OK;
 }

@@ -53,6 +53,14 @@ public:
 
     LEP_RESULT UVC_RunCommand(LEP_COMMAND_ID commandID);
 
+    LEP_RESULT UVC_I2CWriteRead(uint8_t i2cAddress, const void* writeData, int writeLength, void* readData, int readLength, LEP_RESULT* i2cResult);
+
+    LEP_RESULT UVC_I2CWrite(uint8_t i2cAddress, const void* writeData, int writeLength, LEP_RESULT* i2cResult);
+
+    LEP_RESULT UVC_I2CRead(uint8_t i2cAddress, void* readData, int readLength, LEP_RESULT* i2cResult);
+
+    LEP_RESULT UVC_I2CScan(bool addressPresent[128], bool verbose = true);
+
     LEP_CAMERA_PORT_DESC_T_PTR GetPortDescription() { return &m_portDesc; }
 
     virtual const AbstractCCInterface& operator =(const AbstractCCInterface&);
@@ -162,6 +170,10 @@ public slots:
 
 private:
 
+    LEP_RESULT UVC_CustomRead(void* attributePtr, int length);
+
+    LEP_RESULT UVC_CustomWrite(const void* attributePtr, int length);
+
     template <class T, class W>
     function<W(void)> bind_get(function<LEP_RESULT(LEP_CAMERA_PORT_DESC_T_PTR, T*)> F)
     {
@@ -196,7 +208,7 @@ private:
     LEP_CAMERA_PORT_DESC_T m_portDesc;
     uvc_device_descriptor_t *desc;
     QSize m_sensorSize;
-    QMutex m_mutex;
+    QRecursiveMutex m_mutex;
     LEP_RAD_ROI_T m_spotmeterRoi;
 
     QTimer *m_periodicTimer;
