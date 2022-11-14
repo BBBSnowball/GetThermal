@@ -49,6 +49,8 @@ Item {
             Label {
                 id: labelPtFirwmareVers
                 text: qsTr("PT1 FW Version: ") + acq.cci.ptFirmwareVersion
+                width: 180
+                wrapMode: Label.Wrap
             }
         }
 

@@ -16,6 +16,16 @@ Item {
         anchors.fill: parent
         anchors.margins: 5
 
+        Label {
+            id: labelWhyNoAgc
+            width: 180
+            height: 50
+            text: qsTr("AGC is disabled because this device supports ratiometry.")
+            verticalAlignment: Text.AlignVCenter
+            visible: acq.cci.supportsRadiometry
+            wrapMode: Label.WordWrap
+        }
+
         Switch {
             id: checkAgcEnable
             height: 30

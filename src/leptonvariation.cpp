@@ -119,7 +119,10 @@ const QString LeptonVariation::getSysFlirSerialNumber()
 
 const QString LeptonVariation::getOemFlirPartNumber()
 {
-    return QString::fromLatin1(partNumber.value, LEP_SYS_MAX_SERIAL_NUMBER_CHAR_SIZE);
+    if (partNumber.value[LEP_SYS_MAX_SERIAL_NUMBER_CHAR_SIZE-1] != 0)
+        return QString::fromLatin1(partNumber.value, LEP_SYS_MAX_SERIAL_NUMBER_CHAR_SIZE);
+    else
+        return QString::fromLatin1(partNumber.value, -1);  // ignores trailing zeroes
 }
 
 const QString LeptonVariation::getOemGppSoftwareVersion()
