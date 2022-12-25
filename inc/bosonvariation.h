@@ -49,22 +49,22 @@ public:
     Q_PROPERTY(const QString cameraPartNumber READ getCameraPartNumber)
     const QString getCameraPartNumber();
 
-    Q_PROPERTY(const QString sensorSerialNumber READ getSensorSerialNumber)
+    Q_PROPERTY(const QString sensorSerialNumber READ getSensorSerialNumber CONSTANT)
     const QString getSensorSerialNumber();
 
-    Q_PROPERTY(const QString sensorPartNumber READ getSensorPartNumber)
+    Q_PROPERTY(const QString sensorPartNumber READ getSensorPartNumber CONSTANT)
     const QString getSensorPartNumber();
 
-    Q_PROPERTY(const QString softwareRev READ getSoftwareRev)
+    Q_PROPERTY(const QString softwareRev READ getSoftwareRev CONSTANT)
     const QString getSoftwareRev();
 
     Q_PROPERTY(float cameraInternalTempC READ getCameraInternalTempC NOTIFY cameraInternalTempChanged)
     float getCameraInternalTempC();
 
-    Q_PROPERTY(bool supportsHwPseudoColor READ getSupportsHwPseudoColor)
+    Q_PROPERTY(bool supportsHwPseudoColor READ getSupportsHwPseudoColor CONSTANT)
     bool getSupportsHwPseudoColor() const;
 
-    Q_PROPERTY(bool supportsRadiometry READ getSupportsRadiometry)
+    Q_PROPERTY(bool supportsRadiometry READ getSupportsRadiometry CONSTANT)
     bool getSupportsRadiometry();
 
     Q_PROPERTY(const QVideoSurfaceFormat defaultFormat READ getDefaultFormat)

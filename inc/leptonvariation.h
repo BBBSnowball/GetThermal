@@ -86,16 +86,16 @@ public:
     SDK_UINT16_PROPERTY(agcHeqEmptyCount, AgcHeqEmptyCount)
     SDK_UINT16_PROPERTY(agcHeqNormalizationFactor, AgcHeqNormalizationFactor)
 
-    Q_PROPERTY(const QString sysFlirSerialNumber READ getSysFlirSerialNumber)
+    Q_PROPERTY(const QString sysFlirSerialNumber READ getSysFlirSerialNumber CONSTANT)
     const QString getSysFlirSerialNumber();
 
-    Q_PROPERTY(const QString oemFlirPartNumber READ getOemFlirPartNumber)
+    Q_PROPERTY(const QString oemFlirPartNumber READ getOemFlirPartNumber CONSTANT)
     const QString getOemFlirPartNumber();
 
-    Q_PROPERTY(const QString oemGppSoftwareVersion READ getOemGppSoftwareVersion)
+    Q_PROPERTY(const QString oemGppSoftwareVersion READ getOemGppSoftwareVersion CONSTANT)
     const QString getOemGppSoftwareVersion();
 
-    Q_PROPERTY(const QString oemDspSoftwareVersion READ getOemDspSoftwareVersion)
+    Q_PROPERTY(const QString oemDspSoftwareVersion READ getOemDspSoftwareVersion CONSTANT)
     const QString getOemDspSoftwareVersion();
 
     SDK_ENUM_PROPERTY(PCOLOR_LUT_E, vidPcolorLut, VidPcolorLut)
@@ -119,16 +119,16 @@ public:
 
     /* board-specific properties */
 
-    Q_PROPERTY(const QString ptFirmwareVersion READ getPtFirmwareVersion)
+    Q_PROPERTY(const QString ptFirmwareVersion READ getPtFirmwareVersion CONSTANT)
     const QString getPtFirmwareVersion() const;
 
-    Q_PROPERTY(bool supportsHwPseudoColor READ getSupportsHwPseudoColor)
+    Q_PROPERTY(bool supportsHwPseudoColor READ getSupportsHwPseudoColor CONSTANT)
     bool getSupportsHwPseudoColor() const;
 
-    Q_PROPERTY(bool supportsRadiometry READ getSupportsRadiometry)
+    Q_PROPERTY(bool supportsRadiometry READ getSupportsRadiometry CONSTANT)
     bool getSupportsRadiometry();
 
-    Q_PROPERTY(bool supportsRuntimeAgcChange READ getSupportsRuntimeAgcChange)
+    Q_PROPERTY(bool supportsRuntimeAgcChange READ getSupportsRuntimeAgcChange CONSTANT)
     bool getSupportsRuntimeAgcChange() const;
 
     virtual const QVideoSurfaceFormat getDefaultFormat();
