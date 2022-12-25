@@ -181,7 +181,9 @@ void LeptonVariation::updateSpotmeter()
             && ReadMLX90614ObjectTemperature(NULL, &objectTemperatureMLX90614) == LEP_OK)
         {
             printf("MLX90614 reports %.2f °C (ambient) and %.2f °C (object)\n",
-                ambientTemperatureMLX90614, objectTemperatureMLX90614);
+                ambientTemperatureMLX90614 - 273.15, objectTemperatureMLX90614 - 273.15);
+            emit irThermometerInKelvinChanged();
+            emit irThermometerAmbientInKelvinChanged();
         }
     }
 }
@@ -514,17 +516,19 @@ LEP_RESULT LeptonVariation::ReadFromMLX90614(uint8_t command, uint16_t* out)
     }
     else if (i2cResult != LEP_OK)
     {
+        printf("I2C communication to MLX90614 didn't go as expected: %d\n", i2cResult);
+
         if (errorsForMLX90614 < 5)
         {
             errorsForMLX90614++;
             if (errorsForMLX90614 == 5)
             {
+                printf("Giving up on MLX90614 because there were too many errors.\n");
                 hasMLX90614 = false;
-                //FIXME notify
+                emit irThermometerAvailableChanged();
             }
         }
 
-        printf("I2C communication to MLX90614 didn't go as expected: %d\n", i2cResult);
         return result < 0 ? result : LEP_ERROR_I2C_FAIL;
     }
     else
@@ -538,7 +542,7 @@ LEP_RESULT LeptonVariation::ReadFromMLX90614(uint8_t command, uint16_t* out)
     }
 }
 
-LEP_RESULT LeptonVariation::ReadMLX90614AmbientTemperature(uint16_t* raw, float* celsius, bool force)
+LEP_RESULT LeptonVariation::ReadMLX90614AmbientTemperature(uint16_t* raw, float* kelvin, bool force)
 {
     LEP_RESULT result;
 
@@ -556,13 +560,13 @@ LEP_RESULT LeptonVariation::ReadMLX90614AmbientTemperature(uint16_t* raw, float*
 
     if (raw)
         *raw = value;
-    if (celsius)
-        *celsius = value * 0.02 - 273.15;
+    if (kelvin)
+        *kelvin = value * 0.02;
 
     return LEP_OK;
 }
 
-LEP_RESULT LeptonVariation::ReadMLX90614ObjectTemperature(uint16_t* raw, float* celsius, bool force)
+LEP_RESULT LeptonVariation::ReadMLX90614ObjectTemperature(uint16_t* raw, float* kelvin, bool force)
 {
     LEP_RESULT result;
 
@@ -580,8 +584,8 @@ LEP_RESULT LeptonVariation::ReadMLX90614ObjectTemperature(uint16_t* raw, float* 
 
     if (raw)
         *raw = value;
-    if (celsius)
-        *celsius = value * 0.02 - 273.15;
+    if (kelvin)
+        *kelvin = value * 0.02;
 
     return LEP_OK;
 }
@@ -655,19 +659,23 @@ LEP_RESULT LeptonVariation::EnumerateMLX90614()
     }
 
     //NOTE Both ranges are a bit wider than what is supported according to the datasheet.
-    if (ambientTemperature < -60 || ambientTemperature > 150 || objectTemperature < -100 || objectTemperature > 500)
+    float ambientTemperatureCelsius = ambientTemperature - 273.15, objectTemperatureCelsius = objectTemperature - 273.15;
+    if (ambientTemperatureCelsius < -60 || ambientTemperatureCelsius > 150 || objectTemperatureCelsius < -100 || objectTemperatureCelsius > 500)
     {
-        printf("We got unexpected temperatures from MLX90614: ambient %.2f °C, object %.2f °C\n", ambientTemperature, objectTemperature);
+        printf("We got unexpected temperatures from MLX90614: ambient %.2f °C, object %.2f °C\n", ambientTemperatureCelsius, objectTemperatureCelsius);
         return LEP_OK;
     }
 
     printf("We found an MLX90614 connected to the PureThermal board. Current temperatures are %.2f °C (ambient, i.e. the sensor itself) and %.2f °C (object).\n",
-        ambientTemperature, objectTemperature);
+        ambientTemperatureCelsius, objectTemperatureCelsius);
 
-    //FIXME notify for hasMLX90614 and temperatures
     hasMLX90614 = true;
     ambientTemperatureMLX90614 = ambientTemperature;
     objectTemperatureMLX90614 = objectTemperature;
+
+    emit irThermometerInKelvinChanged();
+    emit irThermometerAmbientInKelvinChanged();
+    emit irThermometerAvailableChanged();
 
     return LEP_OK;
 }

@@ -76,9 +76,20 @@ Item {
                 farenheitTemps: rangeDisplay.farenheitTemps
             }
 
+            IRThermometerInfo {
+                id: irThermometerInfo
+                anchors.top: spotInfo.bottom
+                anchors.topMargin: 5
+                anchors.left: parent.left
+                anchors.right: parent.right
+                acq: acq
+                farenheitTemps: rangeDisplay.farenheitTemps
+                visible: acq.cci.irThermometerAvailable
+            }
+
             RangeDisplay {
                 id: rangeDisplay
-                anchors.top: spotInfo.bottom
+                anchors.top: acq.cci.irThermometerAvailable ? irThermometerInfo.bottom : spotInfo.bottom
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom

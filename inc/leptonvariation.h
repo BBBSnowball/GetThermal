@@ -58,8 +58,8 @@ public:
     LEP_RESULT UVC_I2CRead(uint8_t i2cAddress, void* readData, int readLength, LEP_RESULT* i2cResult);
     LEP_RESULT UVC_I2CScan(bool addressPresent[128], bool verbose = true);
 
-    LEP_RESULT ReadMLX90614AmbientTemperature(uint16_t* raw, float* celsius, bool force = false);
-    LEP_RESULT ReadMLX90614ObjectTemperature(uint16_t* raw, float* celsius, bool force = false);
+    LEP_RESULT ReadMLX90614AmbientTemperature(uint16_t* raw, float* kelvin, bool force = false);
+    LEP_RESULT ReadMLX90614ObjectTemperature(uint16_t* raw, float* kelvin, bool force = false);
     LEP_RESULT ReadFromMLX90614(uint8_t command, uint16_t* out);
 
     LEP_CAMERA_PORT_DESC_T_PTR GetPortDescription() { return &m_portDesc; }
@@ -113,6 +113,15 @@ public:
     }
     void setRadSpotmeterRoi(const QRect& roi);
 
+    Q_PROPERTY(float irThermometerInKelvin READ getIrThermometerInKelvin NOTIFY irThermometerInKelvinChanged)
+    float getIrThermometerInKelvin() { return objectTemperatureMLX90614; }
+
+    Q_PROPERTY(float irThermometerAmbientInKelvin READ getIrThermometerAmbientInKelvin NOTIFY irThermometerAmbientInKelvinChanged)
+    float getIrThermometerAmbientInKelvin() { return ambientTemperatureMLX90614; }
+
+    Q_PROPERTY(bool irThermometerAvailable READ getIrThermometerAvailable NOTIFY irThermometerAvailableChanged)
+    bool getIrThermometerAvailable() { return hasMLX90614; }
+
     SDK_ENUM_PROPERTY(RAD_TLINEAR_RESOLUTION_E, radTLinearResolution, RadTLinearResolution)
 
     SDK_ENUM_PROPERTY(SYS_GAIN_MODE_E, sysGainMode, SysGainMode)
@@ -162,6 +171,9 @@ signals:
     void radTLinearResolutionChanged(RAD_TLINEAR_RESOLUTION_E val);
     void radSpotmeterInKelvinX100Changed();
     void radSpotmeterRoiChanged();
+    void irThermometerInKelvinChanged();
+    void irThermometerAmbientInKelvinChanged();
+    void irThermometerAvailableChanged();
 
     void sysGainModeChanged(SYS_GAIN_MODE_E val);
 
